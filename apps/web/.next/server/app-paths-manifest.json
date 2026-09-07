@@ -1,0 +1,12 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/help/contact/page": "app/help/contact/page.js",
+  "/help/page": "app/help/page.js",
+  "/page": "app/page.js",
+  "/agb/page": "app/agb/page.js",
+  "/datenschutz/page": "app/datenschutz/page.js",
+  "/impressum/page": "app/impressum/page.js",
+  "/category/[slug]/page": "app/category/[slug]/page.js",
+  "/help/faq/page": "app/help/faq/page.js",
+  "/widerruf/page": "app/widerruf/page.js"
+}

@@ -1,0 +1,25 @@
+{
+  "name": "dodo",
+  "private": true,
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "postinstall": "pnpm --filter @dodo/database build",
+    "db:generate": "pnpm --filter @dodo/database generate",
+    "db:migrate": "pnpm --filter @dodo/database migrate:dev",
+    "db:seed": "pnpm --filter @dodo/database seed",
+    "format": "prettier -w \"**/*.{ts,tsx,js,json,md}\" --ignore-path .gitignore"
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  }
+}

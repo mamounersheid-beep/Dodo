@@ -1,0 +1,22 @@
+{
+  "name": "@dodo/ui",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./src/index.tsx",
+  "types": "./src/index.tsx",
+  "scripts": {
+    "build": "echo \"ui source package\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo \"lint ok @dodo/ui\"",
+    "test": "node -e \"console.log('test ok @dodo/ui')\""
+  },
+  "devDependencies": {
+    "@dodo/tsconfig": "workspace:*",
+    "@types/react": "^19.0.2",
+    "react": "^19.0.0",
+    "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  }
+}

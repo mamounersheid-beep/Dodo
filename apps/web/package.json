@@ -1,0 +1,41 @@
+{
+  "name": "@dodo/web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo \"lint ok @dodo/web\"",
+    "test": "node -e \"console.log('test ok @dodo/web')\"",
+    "test:store-header-identity": "tsx src/lib/store-header.identity.selftest.ts",
+    "test:store-homepage-identity": "tsx src/lib/store-homepage.identity.selftest.ts",
+    "test:store-footer-identity": "tsx src/lib/store-footer.identity.selftest.ts",
+    "test:store-footer-nav": "tsx src/lib/store-footer-nav.selftest.ts",
+    "test:store-document-title": "tsx src/lib/store-document-title.selftest.ts",
+    "test:store-impressum": "tsx src/lib/store-impressum.selftest.ts",
+    "test:store-agb": "tsx src/lib/store-agb.selftest.ts",
+    "test:store-datenschutz": "tsx src/lib/store-datenschutz.selftest.ts",
+    "test:store-widerruf": "tsx src/lib/store-widerruf.selftest.ts",
+    "test:store-faq": "tsx src/lib/store-faq.selftest.ts",
+    "test:store-help": "tsx src/lib/store-help.selftest.ts",
+    "test:store-contact": "tsx src/lib/store-contact.selftest.ts",
+    "test:store-homepage-categories": "tsx src/lib/store-homepage-categories.selftest.ts"
+  },
+  "dependencies": {
+    "@dodo/shared-types": "workspace:*",
+    "@dodo/ui": "workspace:*",
+    "next": "^15.1.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@dodo/tsconfig": "workspace:*",
+    "@types/node": "^22.10.2",
+    "@types/react": "^19.0.2",
+    "@types/react-dom": "^19.0.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

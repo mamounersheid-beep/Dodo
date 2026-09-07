@@ -1,0 +1,1042 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleCode {
+  CUSTOMER
+  SUPPORT
+  ADMIN
+  OWNER
+  SYSTEM
+}
+
+enum AddressType {
+  BILLING
+  SHIPPING
+}
+
+enum OrderStatus {
+  PLACED
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  COMPLETED
+  CANCELLED
+  RETURN_REQUESTED
+  RETURNED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum CouponType {
+  PERCENT
+  FIXED
+  FREE_SHIPPING
+}
+
+enum BonusLedgerType {
+  EARN
+  REDEEM
+  CLAWBACK
+  REDEEM_RESTORE
+  EXPIRE
+  ADJUST
+}
+
+enum ActorType {
+  USER
+  ADMIN
+  SYSTEM
+}
+
+enum TaxMode {
+  KLEINUNTERNEHMER
+  VAT
+}
+
+enum ReturnType {
+  WIDERRUF
+  DEFECT
+  WRONG_ITEM
+  OTHER
+}
+
+/** ReturnRequest.status SoT — STATE_MACHINES / ERD */
+enum ReturnRequestStatus {
+  REQUESTED
+  APPROVED
+  RECEIVED
+  CLOSED
+  REJECTED
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+/** #8 — ERD / 10.2 · values literal · unbound to models in F2 */
+enum GpsrCatalogTier {
+  standard
+  restricted
+}
+
+/** L5 — ERD / COMPLIANCE · unbound to models in F2 */
+enum GrundpreisRequirement {
+  inherit
+  require
+  exempt
+}
+
+/** #8 — ERD / 10.2 · unbound to models in F2 */
+enum ManufacturerSource {
+  store_default
+  product_specific
+}
+
+/** #9 — 10.13 §9d / ERD · unbound to models in F2 */
+enum ReturnShippingCostWiderrufPolicy {
+  MERCHANT_PAYS
+  CUSTOMER_PAYS_DIRECT_COST
+  CUSTOMER_PAYS_STATED_ESTIMATE
+}
+
+/** ReviewReport V1 — ERD / 10.14 §1b */
+enum ReviewReportReasonCode {
+  PROFANITY
+  HARASSMENT
+  HATE_SPEECH
+  SEXUAL_CONTENT
+  SPAM
+  PERSONAL_DATA
+  OTHER
+}
+
+/** ReviewReport V1 — ERD / 10.14 §1b */
+enum ReviewReportStatus {
+  OPEN
+  CLOSED
+}
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  passwordHash    String?
+  emailVerifiedAt DateTime?
+  name            String?
+  companyName     String?
+  vatId           String?
+  locale          String    @default("de")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  anonymizedAt    DateTime?
+  deletedAt       DateTime?
+
+  roles          UserRole[]
+  sessions       Session[]
+  addresses      Address[]
+  orders         Order[]
+  bonusAccount   BonusAccount?
+  reviews        Review[]
+  reviewReports  ReviewReport[] @relation("ReviewReporter")
+  couponUsages   CouponUsage[]
+  auditLogs      AuditLog[]     @relation("AuditActor")
+  wishlistItems  WishlistItem[]
+}
+
+model Role {
+  id    String   @id @default(cuid())
+  code  RoleCode @unique
+  users UserRole[]
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User @relation(fields: [userId], references: [id])
+  role   Role @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+}
+
+model Session {
+  id               String    @id @default(cuid())
+  userId           String
+  refreshTokenHash String
+  ip               String?
+  userAgent        String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  user             User      @relation(fields: [userId], references: [id])
+}
+
+model VerificationToken {
+  id        String    @id @default(cuid())
+  userId    String?
+  email     String
+  type      String
+  tokenHash String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([email, type])
+}
+
+model Address {
+  id         String      @id @default(cuid())
+  userId     String?
+  type       AddressType
+  name       String
+  line1      String
+  line2      String?
+  postalCode String
+  city       String
+  countryCode String     @db.Char(2)
+  phone      String?
+  isDefault  Boolean     @default(false)
+  user       User?       @relation(fields: [userId], references: [id])
+}
+
+model CompanySettings {
+  id                      String    @id @default("default")
+  legalName               String
+  line1                   String
+  postalCode              String
+  city                    String
+  countryCode             String    @default("DE") @db.Char(2)
+  steuernummer            String?
+  vatId                   String?
+  kleinunternehmerId      String?
+  isKleinunternehmer      Boolean   @default(true)
+  kleinunternehmerSince   DateTime?
+  invoiceExemptionText    String
+  defaultCurrencyCode     String    @default("EUR") @db.Char(3)
+  defaultLocale           String    @default("de")
+  supportPhone            String?
+  supportEmail            String?
+  invoiceNextNumber       Int       @default(1)
+  orderNextNumber         Int       @default(1)
+  logoObjectKey           String?
+  updatedAt               DateTime  @updatedAt
+
+  // --- #3+#9 return (Owner-required · Phase-1 nullable · no invented values) ---
+  returnAddressName                 String?
+  returnAddressLine1                String?
+  returnAddressLine2                String?
+  returnPostalCode                  String?
+  returnCity                        String?
+  returnCountryCode                 String?   @db.Char(2)
+  returnAddressPhone                String?
+  returnInstructionsMarkdown        String?
+  returnShipWithinDays              Int?
+  returnShippingCostWiderrufPolicy  ReturnShippingCostWiderrufPolicy?
+
+  // --- #15 Lieferzeit (Owner-required · Phase-1 nullable · F5 values 1/3, not Phase-4 NOT NULL) ---
+  orderProcessingDaysMin  Int?
+  orderProcessingDaysMax  Int?
+
+  // --- #8 default manufacturer / EU RP (Owner-required · Phase-1 nullable) ---
+  defaultManufacturerDisplayName           String?
+  defaultManufacturerAddressLine1          String?
+  defaultManufacturerAddressLine2          String?
+  defaultManufacturerPostalCode            String?
+  defaultManufacturerCity                  String?
+  defaultManufacturerCountryCode           String?  @db.Char(2)
+  defaultManufacturerEstablishedInUnion    Boolean?
+  defaultManufacturerEmail                 String?
+  defaultEuResponsiblePersonDisplayName    String?
+  defaultEuResponsiblePersonAddressLine1   String?
+  defaultEuResponsiblePersonAddressLine2   String?
+  defaultEuResponsiblePersonPostalCode     String?
+  defaultEuResponsiblePersonCity           String?
+  defaultEuResponsiblePersonCountryCode    String?  @db.Char(2)
+  defaultEuResponsiblePersonEmail          String?
+
+  // --- #7 operational flags (contractual defaults) ---
+  maintenanceMode              Boolean  @default(false)
+  maintenanceNoticeMarkdown    String?
+  maintenanceNoticeLocale      String   @default("de")
+  checkoutEnabled              Boolean  @default(true)
+  /** V1 keys only: stripe · paypal — shape PaymentsEnabledV1 */
+  paymentsEnabled              Json     @default("{\"stripe\":true,\"paypal\":true}")
+  couponsEnabled               Boolean  @default(true)
+  bonusPlusEnabled             Boolean  @default(true)
+  /** No contractual @default(now()); set on flag init / OWNER write (EM8) */
+  operationalFlagsUpdatedAt    DateTime?
+}
+
+model Category {
+  id                 String           @id @default(cuid())
+  parentId           String?
+  slug               String           @unique
+  name               String
+  description        String?
+  path               String
+  depth              Int
+  sortOrder          Int              @default(0)
+  sizeGuideMarkdown  String?
+  isActive           Boolean          @default(true)
+  requiresGrundpreis Boolean          @default(false)
+  gpsrCatalogTier    GpsrCatalogTier  @default(standard)
+  parent             Category?        @relation("CategoryTree", fields: [parentId], references: [id])
+  children           Category[]       @relation("CategoryTree")
+  products           Product[]
+}
+
+model Brand {
+  id       String    @id @default(cuid())
+  name     String
+  slug     String    @unique
+  products Product[]
+}
+
+model Product {
+  id             String              @id @default(cuid())
+  categoryId     String
+  brandId        String?
+  slug           String              @unique
+  /** Fallback / default-locale (de) copy — prefer ProductTranslation for storefront. */
+  name           String
+  description    String
+  seoTitle       String?
+  seoDescription String?
+  isActive       Boolean             @default(true)
+  createdAt      DateTime            @default(now())
+  // --- L5 Grundpreis ---
+  grundpreisRequirement GrundpreisRequirement @default(inherit)
+  // --- #8 manufacturer / EU RP overrides ---
+  manufacturerSource                 ManufacturerSource @default(store_default)
+  manufacturerDisplayName            String?
+  manufacturerAddressLine1           String?
+  manufacturerAddressLine2           String?
+  manufacturerPostalCode             String?
+  manufacturerCity                   String?
+  manufacturerCountryCode            String?
+  manufacturerEstablishedInUnion     Boolean?
+  manufacturerEmail                  String?
+  euResponsiblePersonDisplayName     String?
+  euResponsiblePersonAddressLine1    String?
+  euResponsiblePersonAddressLine2    String?
+  euResponsiblePersonPostalCode      String?
+  euResponsiblePersonCity            String?
+  euResponsiblePersonCountryCode     String?
+  euResponsiblePersonEmail           String?
+  safetyInformationRequired          Boolean @default(false)
+  category       Category            @relation(fields: [categoryId], references: [id])
+  brand          Brand?              @relation(fields: [brandId], references: [id])
+  translations   ProductTranslation[]
+  variants       ProductVariant[]
+  images         ProductImage[]
+  reviews        Review[]
+  relatedFrom         RelatedProduct[]     @relation("ProductRelatedFrom")
+  relatedTo           RelatedProduct[]     @relation("ProductRelatedTo")
+  homeSectionProducts HomeSectionProduct[]
+}
+
+model ProductTranslation {
+  id                        String  @id @default(cuid())
+  productId                 String
+  locale                    String
+  name                      String
+  description               String
+  seoTitle                  String?
+  seoDescription            String?
+  safetyInformationMarkdown String?
+  product                   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, locale])
+  @@index([locale])
+}
+
+model RelatedProduct {
+  id               String  @id @default(cuid())
+  productId        String
+  relatedProductId String
+  type             String  @default("related")
+  product          Product @relation("ProductRelatedFrom", fields: [productId], references: [id], onDelete: Cascade)
+  related          Product @relation("ProductRelatedTo", fields: [relatedProductId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, relatedProductId, type])
+}
+
+model ProductVariant {
+  id               String      @id @default(cuid())
+  productId        String
+  sku              String      @unique
+  ean              String?
+  name             String?
+  attributesJson   Json?
+  price            Decimal     @db.Decimal(12, 2)
+  weightGrams      Int
+  lengthMm         Int?
+  widthMm          Int?
+  heightMm         Int?
+  grundpreisAmount Decimal?    @db.Decimal(12, 4)
+  grundpreisUnit   String?
+  isActive         Boolean     @default(true)
+  product          Product     @relation(fields: [productId], references: [id])
+  images           ProductImage[]
+  inventories      Inventory[]
+  reservations     Reservation[]
+  cartItems        CartItem[]
+  orderItems       OrderItem[]
+  bundleItems      BundleItem[]
+  wishlistItems    WishlistItem[]
+}
+
+model ProductImage {
+  id        String          @id @default(cuid())
+  productId String
+  variantId String?
+  objectKey String
+  sortOrder Int             @default(0)
+  alt       String?
+  /** Must be 4:5 at upload time — no 360 viewer in V1. */
+  aspectRatio String        @default("4:5")
+  product   Product         @relation(fields: [productId], references: [id])
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+}
+
+model Bundle {
+  id              String       @id @default(cuid())
+  name            String
+  slug            String       @unique
+  discountPercent Decimal?     @db.Decimal(5, 2)
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  items           BundleItem[]
+}
+
+model BundleItem {
+  id        String         @id @default(cuid())
+  bundleId  String
+  variantId String
+  quantity  Int
+  bundle    Bundle         @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  variant   ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@unique([bundleId, variantId])
+}
+
+model Location {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  name        String
+  isActive    Boolean      @default(true)
+  inventories Inventory[]
+  reservations Reservation[]
+}
+
+model Inventory {
+  id             String           @id @default(cuid())
+  locationId     String
+  variantId      String
+  quantityOnHand Int
+  location       Location         @relation(fields: [locationId], references: [id])
+  variant        ProductVariant   @relation(fields: [variantId], references: [id])
+  movements      StockMovement[]
+
+  @@unique([locationId, variantId])
+}
+
+model StockMovement {
+  id            String    @id @default(cuid())
+  inventoryId   String
+  delta         Int
+  reason        String
+  orderId       String?
+  actorId       String?
+  referenceType String?
+  referenceId   String?
+  createdAt     DateTime  @default(now())
+  inventory     Inventory @relation(fields: [inventoryId], references: [id])
+}
+
+model Reservation {
+  id          String         @id @default(cuid())
+  variantId   String
+  locationId  String
+  quantity    Int
+  orderId     String?
+  checkoutKey String?
+  expiresAt   DateTime
+  releasedAt  DateTime?
+  convertedAt DateTime?
+  variant     ProductVariant @relation(fields: [variantId], references: [id])
+  location    Location       @relation(fields: [locationId], references: [id])
+  order       Order?         @relation(fields: [orderId], references: [id])
+
+  @@index([expiresAt])
+  @@index([checkoutKey])
+  @@unique([checkoutKey, variantId, locationId])
+}
+
+model WishlistItem {
+  id        String         @id @default(cuid())
+  userId    String
+  variantId String
+  createdAt DateTime       @default(now())
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, variantId])
+}
+
+model Currency {
+  code     String @id @db.Char(3)
+  symbol   String
+  decimals Int    @default(2)
+}
+
+model TaxRate {
+  id            String    @id @default(cuid())
+  countryCode   String    @db.Char(2)
+  category      String
+  ratePercent   Decimal   @db.Decimal(5, 2)
+  validFrom     DateTime
+  validTo       DateTime?
+  invoiceLabel  String?
+  ossRelevant   Boolean   @default(false)
+
+  @@index([countryCode, validFrom])
+}
+
+model ShippingZone {
+  id          String         @id @default(cuid())
+  countryCode String         @db.Char(2)
+  name        String
+  rates       ShippingRate[]
+}
+
+model ShippingMethod {
+  id       String         @id @default(cuid())
+  code     String         @unique
+  name     String
+  isActive Boolean        @default(true)
+  rates    ShippingRate[]
+}
+
+model ShippingRate {
+  id                      String         @id @default(cuid())
+  zoneId                  String
+  methodId                String
+  minWeight               Int?
+  maxWeight               Int?
+  price                   Decimal        @db.Decimal(12, 2)
+  /// #15 · F5 — store-configured transit estimate for this service (Werktage). No @default.
+  estimatedTransitDaysMin Int
+  estimatedTransitDaysMax Int
+  validFrom               DateTime
+  validTo                 DateTime?
+  zone                    ShippingZone   @relation(fields: [zoneId], references: [id])
+  method                  ShippingMethod @relation(fields: [methodId], references: [id])
+}
+
+model FreeShippingThreshold {
+  id             String  @id @default(cuid())
+  countryCode    String  @db.Char(2)
+  minOrderAmount Decimal @db.Decimal(12, 2)
+  currencyCode   String  @db.Char(3)
+}
+
+model Cart {
+  id           String     @id @default(cuid())
+  userId       String?    @unique
+  guestKey     String?    @unique
+  currencyCode String     @default("EUR") @db.Char(3)
+  updatedAt    DateTime   @updatedAt
+  items        CartItem[]
+}
+
+model CartItem {
+  id        String         @id @default(cuid())
+  cartId    String
+  variantId String
+  quantity  Int
+  cart      Cart           @relation(fields: [cartId], references: [id])
+  variant   ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@unique([cartId, variantId])
+}
+
+model Coupon {
+  id                 String        @id @default(cuid())
+  code               String        @unique
+  type               CouponType
+  value              Decimal       @db.Decimal(12, 2)
+  minOrderAmount     Decimal?      @db.Decimal(12, 2)
+  usageLimitGlobal   Int?
+  usageLimitPerUser  Int?
+  validFrom          DateTime
+  validTo            DateTime?
+  isActive           Boolean       @default(true)
+  usages             CouponUsage[]
+}
+
+model CouponUsage {
+  id         String    @id @default(cuid())
+  couponId   String
+  userId     String?
+  orderId    String
+  usedAt     DateTime  @default(now())
+  /** R2.2-C: NULL = active in quota; once-only NULL→timestamp on Order CANCELLED */
+  releasedAt DateTime?
+  coupon     Coupon    @relation(fields: [couponId], references: [id])
+  user       User?     @relation(fields: [userId], references: [id])
+}
+
+model Order {
+  id                           String        @id @default(cuid())
+  orderNumber                  String        @unique
+  /** G4 §3c: not globally unique — partial uniques in SQL (userId, key) / (guestKey, key). */
+  idempotencyKey               String?
+  userId                       String?
+  guestEmail                   String?
+  guestAccessTokenHash         String?
+  /**
+   * G4 licensed identity — raw trimmed x-guest-key. NULL on registered Orders.
+   * Guest: userId NULL + this set. Not hashed. ≠ guestEmail (fingerprint only).
+   */
+  guestKey                     String?
+  status                       OrderStatus
+  paymentStatus                PaymentStatus @default(PENDING)
+  currencyCode                 String        @db.Char(3)
+  locale                       String        @default("de")
+  shippingCountryCode          String        @db.Char(2)
+  taxMode                      TaxMode       @default(KLEINUNTERNEHMER)
+  companyIsKleinunternehmer    Boolean
+  invoiceExemptionTextSnapshot String?
+  /**
+   * #13 · 10.8 §4d · 10.10 §1b B-Seller — OrderSellerIdentitySnapshot Json.
+   * Captured once at PLACED from CompanySettings; immutable; NOT NULL (V1 Orders are created as PLACED).
+   * Shape: legalName, line1, postalCode, city, countryCode, supportEmail?, supportPhone?
+   * ≠ Invoice.sellerSnapshotJson · ≠ live CompanySettings at email send.
+   */
+  sellerIdentitySnapshotJson   Json
+  itemsSubtotal                Decimal       @db.Decimal(12, 2)
+  shippingTotal                Decimal       @db.Decimal(12, 2)
+  discountCoupon               Decimal       @db.Decimal(12, 2) @default(0)
+  discountBonus                Decimal       @db.Decimal(12, 2) @default(0)
+  grandTotal                   Decimal       @db.Decimal(12, 2)
+  // --- #9 shipping snapshots (Returns/Refund Widerruf) — closed contract alignment ---
+  shippingZoneId               String?
+  shippingRateId               String?
+  shippingRateNameSnapshot     String?
+  shippingMethodCodeSnapshot   String
+  shippingStandardAmountSnapshot Decimal     @db.Decimal(12, 2)
+  shippingAddressJson          Json
+  billingAddressJson           Json
+  legalAgbVersionId            String?
+  legalAgbHash                 String?
+  legalWiderrufVersionId       String?
+  legalWiderrufHash            String?
+  legalPrivacyVersionId        String?
+  legalPrivacyHash             String?
+  acceptedAgbAt                DateTime?
+  acceptedWiderrufInfoAt       DateTime?
+  couponId                     String?
+  couponCodeSnapshot           String?
+  couponTypeSnapshot           String?
+  couponValueSnapshot          Decimal?      @db.Decimal(12, 2)
+  paymentMethodCodeSnapshot    String?
+  /**
+   * G4 licensed raw request intent — no @default.
+   * NULL = field absent; 0 = explicit 0; n>0 = raw requested points.
+   * Never written from effectivePoints / bonusPointsRedeemed / discountBonus.
+   */
+  bonusPointsToRedeem          Int?
+  bonusPointsRedeemed          Int           @default(0)
+  bonusDiscountAmount          Decimal       @db.Decimal(12, 2) @default(0)
+  bonusPointsEarned            Int?
+  /**
+   * #15 · 10.8 §4c · F5 — Checkout disclosure actually shown at PLACED.
+   * Optional: G3 capture is a later slice. Existing Orders stay NULL (no backfill).
+   */
+  deliveryTimeDisclosureSnapshot Json?
+  placedAt                     DateTime      @default(now())
+  confirmedAt                  DateTime?
+  deliveredAt                  DateTime?
+  widerrufDeadlineAt           DateTime?
+  createdAt                    DateTime      @default(now())
+  user                         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  items                        OrderItem[]
+  payments                     Payment[]
+  invoices                     Invoice[]
+  shipments                    Shipment[]
+  returns                      ReturnRequest[]
+  refunds                      Refund[]
+  statusHistory                OrderStatusHistory[]
+  reservations                 Reservation[]
+
+  @@index([status, createdAt])
+  @@index([guestEmail])
+}
+
+model OrderItem {
+  id                 String         @id @default(cuid())
+  orderId            String
+  variantId          String
+  skuSnapshot        String
+  nameSnapshot       String
+  quantity           Int
+  unitPriceSnapshot  Decimal        @db.Decimal(12, 2)
+  lineTotalSnapshot  Decimal        @db.Decimal(12, 2)
+  weightGramsSnapshot Int
+  taxRateSnapshot    Decimal?       @db.Decimal(5, 2)
+  order               Order          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  variant             ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  returnItems         ReturnItem[]
+}
+
+model OrderStatusHistory {
+  id         String       @id @default(cuid())
+  orderId    String
+  fromStatus OrderStatus?
+  toStatus   OrderStatus
+  at         DateTime     @default(now())
+  actorType  ActorType
+  actorId    String?
+  order      Order        @relation(fields: [orderId], references: [id])
+}
+
+model PaymentMethod {
+  id               String    @id @default(cuid())
+  code             String    @unique
+  provider         String
+  isEnabled        Boolean   @default(true)
+  sortOrder        Int       @default(0)
+  countryCodesJson Json?
+  payments         Payment[]
+}
+
+model Payment {
+  id               String        @id @default(cuid())
+  orderId          String
+  paymentMethodId  String
+  provider         String
+  providerIntentId String?
+  amount           Decimal       @db.Decimal(12, 2)
+  currencyCode     String        @db.Char(3)
+  status           PaymentStatus
+  rawLastEventId   String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  order            Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  method           PaymentMethod @relation(fields: [paymentMethodId], references: [id])
+  refunds          Refund[]
+
+  @@unique([provider, providerIntentId])
+  @@index([providerIntentId])
+}
+
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  provider    String
+  eventId     String
+  payloadHash String?
+  processedAt DateTime @default(now())
+
+  @@unique([provider, eventId])
+}
+
+model Invoice {
+  id                     String       @id @default(cuid())
+  orderId                String
+  invoiceNumber          String       @unique
+  issuedAt               DateTime     @default(now())
+  pdfObjectKey           String?
+  grandTotalSnapshot     Decimal      @db.Decimal(12, 2)
+  exemptionTextSnapshot  String?
+  buyerSnapshotJson      Json
+  sellerSnapshotJson     Json
+  status                 String       @default("issued")
+  order                  Order        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  creditNotes            CreditNote[]
+}
+
+model CreditNote {
+  id           String   @id @default(cuid())
+  invoiceId    String
+  orderId      String
+  creditNumber String   @unique
+  amount       Decimal  @db.Decimal(12, 2)
+  reason       String
+  pdfObjectKey String?
+  createdAt    DateTime @default(now())
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+}
+
+model Refund {
+  id                            String       @id @default(cuid())
+  orderId                       String
+  paymentId                     String
+  returnRequestId               String?
+  amount                        Decimal      @db.Decimal(12, 2)
+  currencyCode                  String       @db.Char(3)
+  status                        RefundStatus @default(PENDING)
+  providerRefundId              String?
+  reason                        String
+  originalShippingRefundAmount  Decimal?     @db.Decimal(12, 2)
+  returnShippingCost            Decimal?     @db.Decimal(12, 2)
+  refundTotal                   Decimal?     @db.Decimal(12, 2)
+  createdAt                     DateTime     @default(now())
+  completedAt                   DateTime?
+  order                         Order        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  payment                       Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  returnRequest                 ReturnRequest? @relation(fields: [returnRequestId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, status])
+}
+
+model Shipment {
+  id              String    @id @default(cuid())
+  orderId         String
+  carrier         String
+  trackingNumber  String?
+  trackingUrl     String?
+  labelObjectKey  String?
+  weightGrams     Int?
+  packagingVolume String?
+  shippedAt       DateTime?
+  deliveredAt     DateTime?
+  order           Order     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@unique([carrier, trackingNumber])
+}
+
+model ReturnRequest {
+  id                 String              @id @default(cuid())
+  orderId            String
+  userId             String?
+  guestEmail         String?
+  type               ReturnType
+  reasonCode         String?
+  status             ReturnRequestStatus
+  /** Stored values restricted to DELIVERED | COMPLETED (closed SM invariant). */
+  orderPriorStatus   OrderStatus
+  requestedAt        DateTime            @default(now())
+  widerrufDeadlineAt DateTime?
+  windowOk           Boolean?
+  returnAddressSnapshotJson    Json
+  returnInstructionsSnapshot   String
+  returnLocale                 String
+  estimatedItemsRefund             Decimal? @db.Decimal(12, 2)
+  estimatedOriginalShippingRefund  Decimal? @db.Decimal(12, 2)
+  estimatedReturnShippingCost      Decimal? @db.Decimal(12, 2)
+  estimatedRefundTotal             Decimal? @db.Decimal(12, 2)
+  rejectionReasonCode      String?
+  rejectionReasonCustomer  String?
+  internalNote             String?
+  createdAt          DateTime            @default(now())
+  resolvedAt         DateTime?
+  order              Order               @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  items              ReturnItem[]
+  refunds            Refund[]
+}
+
+model ReturnItem {
+  id              String        @id @default(cuid())
+  returnRequestId String
+  orderItemId     String
+  quantity        Int
+  restock         Boolean       @default(true)
+  returnRequest   ReturnRequest @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  orderItem       OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+}
+
+model BonusRules {
+  id                     String   @id @default(cuid())
+  enabled                Boolean  @default(true)
+  earnPointsPerEuro      Int      @default(1)
+  redeemPointsPerEuro    Int      @default(100)
+  maxRedeemPercentOfItems Int     @default(50)
+  expiryMonths           Int      @default(24)
+  updatedAt              DateTime @updatedAt
+}
+
+model BonusAccount {
+  id            String        @id @default(cuid())
+  userId        String        @unique
+  balanceCached Int           @default(0)
+  user          User          @relation(fields: [userId], references: [id])
+  ledger        BonusLedger[]
+}
+
+model BonusLedger {
+  id             String          @id @default(cuid())
+  accountId      String
+  type           BonusLedgerType
+  points         Int
+  orderId        String?
+  idempotencyKey String          @unique
+  expiresAt      DateTime?
+  actorType      ActorType
+  actorId        String?
+  note           String?
+  createdAt      DateTime        @default(now())
+  account        BonusAccount    @relation(fields: [accountId], references: [id])
+
+  @@index([accountId, createdAt])
+}
+
+/** Homepage Sections V1 B′ — system keys only: new_arrivals | store_picks (Paper Promoted). */
+model HomeSection {
+  id           String                   @id @default(cuid())
+  key          String                   @unique
+  type         String
+  enabled      Boolean                  @default(true)
+  sortOrder    Int                      @default(0)
+  itemLimit    Int                      @default(8)
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+  translations HomeSectionTranslation[]
+  products     HomeSectionProduct[]
+}
+
+model HomeSectionTranslation {
+  id        String      @id @default(cuid())
+  sectionId String
+  locale    String
+  name      String
+  section   HomeSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@unique([sectionId, locale])
+  @@index([locale])
+}
+
+model HomeSectionProduct {
+  id        String      @id @default(cuid())
+  sectionId String
+  productId String
+  sortOrder Int
+  section   HomeSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  product   Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([sectionId, productId])
+  @@index([sectionId, sortOrder])
+}
+
+model LegalPage {
+  id                      String    @id @default(cuid())
+  slug                    String
+  countryCode             String    @default("DE") @db.Char(2)
+  version                 String
+  title                   String
+  body                    String
+  contentHash             String?
+  publishedAt             DateTime?
+  supersededAt            DateTime?
+  publishNote             String?
+  /** #14 — required at publish for slug datenschutz (service guard); not NOT NULL for all pages */
+  consentMigrationPolicy  Json?
+
+  @@unique([slug, countryCode, version])
+}
+
+model CookieConsent {
+  id             String   @id @default(cuid())
+  visitorKey     String?
+  userId         String?
+  categoriesJson Json
+  policyVersion  String
+  createdAt      DateTime @default(now())
+}
+
+model Review {
+  id               String        @id @default(cuid())
+  productId        String
+  variantId        String?
+  userId           String
+  orderId          String?
+  rating           Int
+  body             String?
+  verifiedPurchase Boolean       @default(false)
+  status           String        @default("pending")
+  createdAt        DateTime      @default(now())
+  product          Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  user             User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  reply            ReviewReply?
+  reports          ReviewReport[]
+
+  @@unique([userId, productId, orderId])
+}
+
+model ReviewReply {
+  id            String   @id @default(cuid())
+  reviewId      String   @unique
+  body          String
+  authorStaffId String
+  createdAt     DateTime @default(now())
+  review        Review   @relation(fields: [reviewId], references: [id])
+}
+
+model ReviewReport {
+  id             String                 @id @default(cuid())
+  reviewId       String
+  reporterUserId String
+  reasonCode     ReviewReportReasonCode
+  status         ReviewReportStatus     @default(OPEN)
+  createdAt      DateTime               @default(now())
+  closedAt       DateTime?
+  review         Review                 @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+  reporter       User                   @relation("ReviewReporter", fields: [reporterUserId], references: [id], onDelete: Restrict)
+
+  @@unique([reviewId, reporterUserId])
+  @@index([reviewId, status])
+  @@index([status, createdAt])
+}
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  actorType  ActorType
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String
+  beforeJson Json?
+  afterJson  Json?
+  createdAt  DateTime  @default(now())
+  actorUser  User?     @relation("AuditActor", fields: [actorId], references: [id])
+}
+
+/** W3 §4f Persist — Admin HTTP Idempotency durable store (not Refund / G4). */
+enum AdminHttpIdempotencyStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+model AdminHttpIdempotency {
+  id               String                      @id @default(cuid())
+  actorId          String
+  namespace         String
+  key              String
+  fingerprint      String
+  operation        String
+  targetId         String
+  status           AdminHttpIdempotencyStatus
+  httpStatus       Int?
+  responseBodyJson Json?
+  createdAt        DateTime                    @default(now())
+  completedAt      DateTime?
+  expiresAt        DateTime
+
+  @@unique([actorId, namespace, key])
+  @@index([expiresAt])
+}

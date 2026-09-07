@@ -1,0 +1,12 @@
+{
+  "/_not-found/page": "/_not-found",
+  "/help/contact/page": "/help/contact",
+  "/help/page": "/help",
+  "/page": "/",
+  "/agb/page": "/agb",
+  "/datenschutz/page": "/datenschutz",
+  "/impressum/page": "/impressum",
+  "/category/[slug]/page": "/category/[slug]",
+  "/help/faq/page": "/help/faq",
+  "/widerruf/page": "/widerruf"
+}
